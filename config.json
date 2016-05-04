@@ -1,0 +1,11 @@
+{
+    "url": "https://cannagrow.herokuapp.com",
+    "secret": "3d39afe9-ea06-4ed0-8b47-f4db2488048d",
+    "database": "redis",
+    "redis": {
+        "host": "pub-redis-11454.us-east-1-2.1.ec2.garantiadata.com",
+        "port": "11454",
+        "password": "Nayla201686",
+        "database": "0"
+    }
+}
