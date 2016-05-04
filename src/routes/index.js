@@ -55,7 +55,7 @@ function categoryRoutes(app, middleware, controllers) {
 	setupPageRoute(app, '/categories', middleware, [], controllers.categories.list);
 	setupPageRoute(app, '/popular/:term?', middleware, [], controllers.popular.get);
 	setupPageRoute(app, '/recent', middleware, [], controllers.recent.get);
-	setupPageRoute(app, '/unread', middleware, [middleware.authenticate], controllers.unread.get);
+	setupPageRoute(app, '/unread/:filter?', middleware, [middleware.authenticate], controllers.unread.get);
 
 	setupPageRoute(app, '/category/:category_id/:slug/:topic_index', middleware, [], controllers.category.get);
 	setupPageRoute(app, '/category/:category_id/:slug?', middleware, [], controllers.category.get);
@@ -80,12 +80,24 @@ function groupRoutes(app, middleware, controllers) {
 	setupPageRoute(app, '/groups/:slug/members', middleware, middlewares, controllers.groups.members);
 }
 
-module.exports = function(app, middleware) {
-	var router = express.Router(),
-		pluginRouter = express.Router(),
-		authRouter = express.Router(),
+module.exports = function(app, middleware, hotswapIds) {
+	var routers = [
+			express.Router(),	// plugin router
+			express.Router(),	// main app router
+			express.Router()	// auth router
+		],
+		router = routers[1],
+		pluginRouter = routers[0],
+		authRouter = routers[2],
 		relativePath = nconf.get('relative_path'),
 		ensureLoggedIn = require('connect-ensure-login');
+
+	if (Array.isArray(hotswapIds) && hotswapIds.length) {
+		for(var idx,x=0;x<hotswapIds.length;x++) {
+			idx = routers.push(express.Router()) - 1;
+			routers[idx].hotswapId = hotswapIds[x];
+		}
+	}
 
 	pluginRouter.render = function() {
 		app.render.apply(app, arguments);
@@ -119,9 +131,9 @@ module.exports = function(app, middleware) {
 	userRoutes(router, middleware, controllers);
 	groupRoutes(router, middleware, controllers);
 
-	app.use(relativePath, pluginRouter);
-	app.use(relativePath, router);
-	app.use(relativePath, authRouter);
+	for(var x=0;x<routers.length;x++) {
+		app.use(relativePath, routers[x]);
+	}
 
 	if (process.env.NODE_ENV === 'development') {
 		require('./debug')(app, middleware, controllers);
@@ -162,10 +174,8 @@ function handle404(app, middleware) {
 			res.type('text/javascript').status(200).send('');
 		} else if (isLanguage.test(req.url)) {
 			res.status(200).json({});
-		} else if (req.path.startsWith(relativePath + '/uploads')) {
-			res.status(404).send('');
-		} else if (req.path === '/favicon.ico') {
-			res.status(404).send('');
+		} else if (req.path.startsWith(relativePath + '/uploads') || (req.get('accept') && req.get('accept').indexOf('text/html') === -1) || req.path === '/favicon.ico') {
+			res.sendStatus(404);
 		} else if (req.accepts('html')) {
 			if (process.env.NODE_ENV === 'development') {
 				winston.warn('Route requested but not found: ' + req.url);
@@ -208,7 +218,7 @@ function handleErrors(app, middleware) {
 			res.json({path: validator.escape(req.path || ''), error: err.message});
 		} else {
 			middleware.buildHeader(req, res, function() {
-				res.render('500', {path: validator.escape(req.path || ''), error: validator.escape(err.message)});
+				res.render('500', {path: validator.escape(String(req.path || '')), error: validator.escape(err.message)});
 			});
 		}
 	});

@@ -10,7 +10,7 @@ var db = require('./database'),
 	schemaDate, thisSchemaDate,
 
 	// IMPORTANT: REMEMBER TO UPDATE VALUE OF latestSchema
-	latestSchema = Date.UTC(2016, 1, 25);
+	latestSchema = Date.UTC(2016, 3, 29);
 
 Upgrade.check = function(callback) {
 	db.get('schemaDate', function(err, value) {
@@ -436,6 +436,144 @@ Upgrade.upgrade = function(callback) {
 				});
 			} else {
 				winston.info('[2016/02/25] Social: Post Sharing skipped!');
+				next();
+			}
+		},
+		function(next) {
+			thisSchemaDate = Date.UTC(2016, 3, 14);
+
+			if (schemaDate < thisSchemaDate) {
+				updatesMade = true;
+				winston.info('[2016/04/14] Group title from settings to user profile');
+
+				var user = require('./user');
+				var batch = require('./batch');
+				var count = 0;
+				batch.processSortedSet('users:joindate', function(uids, next) {
+					winston.info('upgraded ' + count + ' users');
+					user.getMultipleUserSettings(uids, function(err, settings) {
+						if (err) {
+							return next(err);
+						}
+						count += uids.length;
+						settings = settings.filter(function(setting) {
+							return setting && setting.groupTitle;
+						});
+
+						async.each(settings, function(setting, next) {
+							db.setObjectField('user:' + setting.uid, 'groupTitle', setting.groupTitle, next);
+						}, next);
+					});
+				}, {}, function(err) {
+					if (err) {
+						return next(err);
+					}
+
+					winston.info('[2016/04/14] Group title from settings to user profile done');
+					Upgrade.update(thisSchemaDate, next);
+				});
+			} else {
+				winston.info('[2016/04/14] Group title from settings to user profile skipped!');
+				next();
+			}
+		},
+		function(next) {
+			thisSchemaDate = Date.UTC(2016, 3, 18);
+
+			if (schemaDate < thisSchemaDate) {
+				updatesMade = true;
+				winston.info('[2016/04/19] Users post count per tid');
+
+				var batch = require('./batch');
+				var topics = require('./topics');
+				var count = 0;
+				batch.processSortedSet('topics:tid', function(tids, next) {
+					winston.info('upgraded ' + count + ' topics');
+					count += tids.length;
+					async.each(tids, function(tid, next) {
+						db.delete('tid:' + tid + ':posters', function(err) {
+							if (err) {
+								return next(err);
+							}
+							topics.getPids(tid, function(err, pids) {
+								if (err) {
+									return next(err);
+								}
+
+								if (!pids.length) {
+									return next();
+								}
+
+								async.eachSeries(pids, function(pid, next) {
+									db.getObjectField('post:' + pid, 'uid', function(err, uid) {
+										if (err) {
+											return next(err);
+										}
+										if (!parseInt(uid, 10)) {
+											return next();
+										}
+										db.sortedSetIncrBy('tid:' + tid + ':posters', 1, uid, next);
+									});
+								}, next);
+							});
+						});
+					}, next);
+				}, {}, function(err) {
+					if (err) {
+						return next(err);
+					}
+
+					winston.info('[2016/04/19] Users post count per tid done');
+					Upgrade.update(thisSchemaDate, next);
+				});
+			} else {
+				winston.info('[2016/04/19] Users post count per tid skipped!');
+				next();
+			}
+		},
+		function(next) {
+			thisSchemaDate = Date.UTC(2016, 3, 29);
+
+			if (schemaDate < thisSchemaDate) {
+				updatesMade = true;
+				winston.info('[2016/04/29] Dismiss flags from deleted topics');
+
+				var posts = require('./posts'),
+					topics = require('./topics');
+
+				var pids, tids;
+
+				async.waterfall([
+					async.apply(db.getSortedSetRange, 'posts:flagged', 0, -1),
+					function(_pids, next) {
+						pids = _pids;
+						posts.getPostsFields(pids, ['tid'], next);
+					},
+					function(_tids, next) {
+						tids = _tids.map(function(a) {
+							return a.tid;
+						});
+
+						topics.getTopicsFields(tids, ['deleted'], next);
+					},
+					function(state, next) {
+						var toDismiss = state.map(function(a, idx) {
+							return parseInt(a.deleted, 10) === 1 ? pids[idx] : null;
+						}).filter(Boolean);
+
+						winston.info('[2016/04/29] ' + toDismiss.length + ' dismissable flags found');
+						async.each(toDismiss, posts.dismissFlag, next);
+					}
+				], function(err) {
+					if (err) {
+						return next(err);
+					}
+
+					winston.info('[2016/04/29] Dismiss flags from deleted topics done');
+					Upgrade.update(thisSchemaDate, next);
+				});
+			} else {
+				winston.info('[2016/04/29] Dismiss flags from deleted topics skipped!');
 				next();
 			}
 		}

@@ -1,5 +1,5 @@
 {
-    "invalid-data": "بيانات غير صالحة",
+    "invalid-data": "بيانات غير صحيحة",
     "not-logged-in": "لم تقم بتسجيل الدخول",
     "account-locked": "تم حظر حسابك مؤقتًا.",
     "search-requires-login": "البحث في المنتدى يتطلب حساب - الرجاء تسجيل الدخول أو التسجيل",
@@ -85,6 +85,7 @@
     "cant-edit-chat-message": "You are not allowed to edit this message",
     "cant-remove-last-user": "You can't remove the last user",
     "cant-delete-chat-message": "You are not allowed to delete this message",
+    "already-voting-for-this-post": "You have already voted for this post.",
     "reputation-system-disabled": "نظام السمعة معطل",
     "downvoting-disabled": "التصويتات السلبية معطلة",
     "not-enough-reputation-to-downvote": "ليس لديك سمعة تكفي لإضافة صوت سلبي لهذا الموضوع",

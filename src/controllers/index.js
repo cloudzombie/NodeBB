@@ -30,7 +30,7 @@ var Controllers = {
 
 
 Controllers.home = function(req, res, next) {
-	var route = meta.config.homePageRoute || meta.config.homePageCustom || 'categories';
+	var route = meta.config.homePageRoute || (meta.config.homePageCustom || '').replace(/^\/+/, '') || 'categories';
 
 	user.getSettings(req.uid, function(err, settings) {
 		if (err) {
@@ -95,15 +95,17 @@ Controllers.reset = function(req, res, next) {
 };
 
 Controllers.login = function(req, res, next) {
-	var data = {},
-		loginStrategies = require('../routes/authentication').getLoginStrategies(),
-		registrationType = meta.config.registrationType || 'normal';
+	var data = {};
+	var loginStrategies = require('../routes/authentication').getLoginStrategies();
+	var registrationType = meta.config.registrationType || 'normal';
+
+	var allowLoginWith = (meta.config.allowLoginWith || 'username-email');
 
 	data.alternate_logins = loginStrategies.length > 0;
 	data.authentication = loginStrategies;
 	data.allowLocalLogin = parseInt(meta.config.allowLocalLogin, 10) === 1 || parseInt(req.query.local, 10) === 1;
 	data.allowRegistration = registrationType === 'normal' || registrationType === 'admin-approval';
-	data.allowLoginWith = '[[login:' + (meta.config.allowLoginWith || 'username-email') + ']]';
+	data.allowLoginWith = '[[login:' + allowLoginWith + ']]';
 	data.breadcrumbs = helpers.buildBreadcrumbs([{text: '[[global:login]]'}]);
 	data.error = req.flash('error')[0];
 	data.title = '[[pages:login]]';
@@ -113,8 +115,18 @@ Controllers.login = function(req, res, next) {
 			external: data.authentication[0].url
 		});
 	}
+	if (req.uid) {
+		user.getUserFields(req.uid, ['username', 'email'], function(err, user) {
+			if (err) {
+				return next(err);
+			}
+			data.username = allowLoginWith === 'email' ? user.email : user.username;
+			res.render('login', data);
+		});
+	} else {
+		res.render('login', data);
+	}
 
-	res.render('login', data);
 };
 
 Controllers.register = function(req, res, next) {
@@ -134,32 +146,29 @@ Controllers.register = function(req, res, next) {
 		},
 		function(next) {
 			plugins.fireHook('filter:parse.post', {postData: {content: meta.config.termsOfUse || ''}}, next);
-		},
-		function(tos, next) {
-			var loginStrategies = require('../routes/authentication').getLoginStrategies();
-			var data = {
-				'register_window:spansize': loginStrategies.length ? 'col-md-6' : 'col-md-12',
-				'alternate_logins': !!loginStrategies.length
-			};
-
-			data.authentication = loginStrategies;
-
-			data.minimumUsernameLength = parseInt(meta.config.minimumUsernameLength, 10);
-			data.maximumUsernameLength = parseInt(meta.config.maximumUsernameLength, 10);
-			data.minimumPasswordLength = parseInt(meta.config.minimumPasswordLength, 10);
-			data.termsOfUse = tos.postData.content;
-			data.breadcrumbs = helpers.buildBreadcrumbs([{text: '[[register:register]]'}]);
-			data.regFormEntry = [];
-			data.error = req.flash('error')[0];
-			data.title = '[[pages:register]]';
-
-			plugins.fireHook('filter:register.build', {req: req, res: res, templateData: data}, next);
 		}
-	], function(err, data) {
+	], function(err, termsOfUse) {
 		if (err) {
 			return next(err);
 		}
-		res.render('register', data.templateData);
+		var loginStrategies = require('../routes/authentication').getLoginStrategies();
+		var data = {
+			'register_window:spansize': loginStrategies.length ? 'col-md-6' : 'col-md-12',
+			'alternate_logins': !!loginStrategies.length
+		};
+
+		data.authentication = loginStrategies;
+
+		data.minimumUsernameLength = parseInt(meta.config.minimumUsernameLength, 10);
+		data.maximumUsernameLength = parseInt(meta.config.maximumUsernameLength, 10);
+		data.minimumPasswordLength = parseInt(meta.config.minimumPasswordLength, 10);
+		data.termsOfUse = termsOfUse.postData.content;
+		data.breadcrumbs = helpers.buildBreadcrumbs([{text: '[[register:register]]'}]);
+		data.regFormEntry = [];
+		data.error = req.flash('error')[0];
+		data.title = '[[pages:register]]';
+
+		res.render('register', data);
 	});
 };
 
@@ -308,12 +317,12 @@ Controllers.manifest = function(req, res) {
 };
 
 Controllers.outgoing = function(req, res, next) {
-	var url = req.query.url,
-		data = {
-			url: validator.escape(url),
-			title: meta.config.title,
-			breadcrumbs: helpers.buildBreadcrumbs([{text: '[[notifications:outgoing_link]]'}])
-		};
+	var url = req.query.url;
+	var data = {
+		url: validator.escape(String(url)),
+		title: meta.config.title,
+		breadcrumbs: helpers.buildBreadcrumbs([{text: '[[notifications:outgoing_link]]'}])
+	};
 
 	if (url) {
 		res.render('outgoing', data);
