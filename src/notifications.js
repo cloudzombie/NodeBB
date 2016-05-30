@@ -12,6 +12,7 @@ var User = require('./user');
 var groups = require('./groups');
 var meta = require('./meta');
 var plugins = require('./plugins');
+var utils = require('../public/src/utils');
 
 (function(Notifications) {
 
@@ -44,6 +45,8 @@ var plugins = require('./plugins');
 				if (!notification) {
 					return next(null, null);
 				}
+
+				notification.datetimeISO = utils.toISOString(notification.datetime);
 
 				if (notification.bodyLong) {
 					notification.bodyLong = S(notification.bodyLong).escapeHTML().s;
@@ -85,7 +88,7 @@ var plugins = require('./plugins');
 		// Removes nids that have been pruned
 		db.isSortedSetMembers('notifications', nids, function(err, exists) {
 			if (err) {
-				return callbacK(err);
+				return callback(err);
 			}
 
 			nids = nids.filter(function(notifId, idx) {
@@ -265,6 +268,23 @@ var plugins = require('./plugins');
 		});
 	};
 
+	Notifications.rescind = function(nid, callback) {
+		callback = callback || function() {};
+
+		async.parallel([
+			async.apply(db.sortedSetRemove, 'notifications', nid),
+			async.apply(db.delete, 'notifications:' + nid)
+		], function(err) {
+			if (err) {
+				winston.error('Encountered error rescinding notification (' + nid + '): ' + err.message);
+			} else {
+				winston.verbose('[notifications/rescind] Rescinded notification "' + nid + '"');
+			}
+
+			callback(err, nid);
+		});
+	};
+
 	Notifications.markRead = function(nid, uid, callback) {
 		callback = callback || function() {};
 		if (!parseInt(uid, 10) || !nid) {
@@ -408,7 +428,6 @@ var plugins = require('./plugins');
 	Notifications.merge = function(notifications, callback) {
 		// When passed a set of notification objects, merge any that can be merged
 		var mergeIds = [
-				'notifications:favourited_your_post_in',
 				'notifications:upvoted_your_post_in',
 				'notifications:user_started_following_you',
 				'notifications:user_posted_to',
@@ -455,7 +474,7 @@ var plugins = require('./plugins');
 				}
 
 				switch(mergeId) {
-					case 'notifications:favourited_your_post_in':	// intentional fall-through
+					// intentional fall-through
 					case 'notifications:upvoted_your_post_in':
 					case 'notifications:user_started_following_you':
 					case 'notifications:user_posted_to':

@@ -83,7 +83,7 @@ function resizeImage(fileObj, callback) {
 		function(next) {
 			fullPath = path.join(nconf.get('base_dir'), nconf.get('upload_path'), '..', fileObj.url);
 
-			image.load(fullPath, next);
+			image.size(fullPath, next);
 		},
 		function (imageData, next) {
 			if (imageData.width < parseInt(meta.config.maximumImageWidth, 10) || 760) {
@@ -198,7 +198,7 @@ function uploadFile(uid, uploadedFile, callback) {
 
 function saveFileToLocal(uploadedFile, callback) {
 	var extension = path.extname(uploadedFile.name);
-	if (!extension) {
+	if (!extension && uploadedFile.type) {
 		extension = '.' + mime.extension(uploadedFile.type);
 	}
 
